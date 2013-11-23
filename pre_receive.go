@@ -26,7 +26,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	// Export to temp
 	log.Println("exporting", dir, newrev, "to", temp)
 	os.Chdir(dir)
-	bs, err := exec.Command("bash", "-c", "git archive --format tar | tar -C "+temp+" -x ").CombinedOutput()
+	bs, err := exec.Command("bash", "-c", "git archive --format=tar master | tar -C "+temp+" -x ").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("- failed to export: %s", bs)
 	}
