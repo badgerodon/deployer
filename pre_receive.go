@@ -21,7 +21,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	// Export to temp
 	log.Println("[build]", "exporting", dir, newrev, "to", temp)
 	os.Chdir(dir)
-	bs, err := exec.Command("/bin/bash", "git archive --format tar | tar -C "+temp+" -x ").CombinedOutput()
+	bs, err := exec.Command("bash", "-c", "git archive --format tar | tar -C "+temp+" -x ").CombinedOutput()
 	if err != nil {
 		return err
 	}
@@ -30,7 +30,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	// Build
 	log.Println("[build]", "building")
 	os.Chdir(temp)
-	bs, err = exec.Command("go", "build", "-v")
+	bs, err = exec.Command("go", "build", "-v").CombinedOutput()
 	if err != nil {
 		return err
 	}
