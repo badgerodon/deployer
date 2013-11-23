@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/go-contrib/uuid"
 	"log"
 	"os"
@@ -16,7 +17,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	}
 
 	temp := filepath.Join(os.TempDir(), uuid.NewV4().String())
-	defer os.RemoveAll(temp)
+	//defer os.RemoveAll(temp)
 
 	// Export to temp
 	log.Println("[build]", "exporting", dir, newrev, "to", temp)
@@ -62,5 +63,5 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	// Enable app in load balancer
 	// Cleanup old versions on the endpoints
 
-	return nil
+	return fmt.Errorf("Not Implemented")
 }
