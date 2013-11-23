@@ -17,28 +17,32 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	}
 
 	temp := filepath.Join(os.TempDir(), uuid.NewV4().String())
+	err = os.Mkdir(temp, 0x777)
+	if err != nil {
+		return fmt.Errorf("- failed to create directory: %v", err)
+	}
 	//defer os.RemoveAll(temp)
 
 	// Export to temp
-	log.Println("[build]", "exporting", dir, newrev, "to", temp)
+	log.Println("exporting", dir, newrev, "to", temp)
 	os.Chdir(dir)
 	bs, err := exec.Command("bash", "-c", "git archive --format tar | tar -C "+temp+" -x ").CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf("- failed to export: %s", bs)
 	}
-	log.Println("[build]", "-", string(bs))
+	log.Println("-", string(bs))
 
 	// Build
-	log.Println("[build]", "building")
+	log.Println("building")
 	os.Chdir(temp)
 	bs, err = exec.Command("go", "build", "-v").CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf("- failed to build: %s", bs)
 	}
-	log.Println("[build]", "-", string(bs))
+	log.Println("-", string(bs))
 
 	// Clean
-	log.Println("[build]", "cleaning")
+	log.Println("cleaning")
 	filepath.Walk(temp, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
