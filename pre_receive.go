@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/go-contrib/uuid"
+	"github.com/moraes/config"
 	"log"
 	"os"
 	"os/exec"
@@ -32,14 +33,32 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	}
 	log.Println("-", string(bs))
 
-	// Build
-	log.Println("building")
+	// Get config
+	log.Println("reading config")
 	os.Chdir(temp)
-	bs, err = exec.Command("go", "build", "-v").CombinedOutput()
+	cfg, err := config.ParseJsonFile("config.json")
 	if err != nil {
-		return fmt.Errorf("- failed to build: %s", bs)
+		return fmt.Errorf("- failed to read config: %v", err)
 	}
-	log.Println("-", string(bs))
+	apps, err := cfg.Map("")
+	if err != nil {
+		return fmt.Errorf("- failed to read applications: %v", err)
+	}
+
+	// Build
+	for k, v := range apps {
+		log.Println("building", k)
+		folder, err := cfg.String(k + ".folder")
+		if err != nil {
+			return fmt.Errorf("- expected folder in: %v, %v", v, err)
+		}
+		os.Chdir(filepath.Join(temp, folder))
+		bs, err = exec.Command("go", "build", "-v").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("- failed to build: %s", bs)
+		}
+		log.Println("-", string(bs))
+	}
 
 	// Clean
 	log.Println("cleaning")
