@@ -222,7 +222,17 @@ func main() {
 		}
 		hostname := args[2]
 		err = Bootstrap(hostname)
-	case "post-receive":
+	case "pre-receive":
+		if len(args) <= 5 {
+			log.Fatalln("Expected `dir`, `oldrev`, `newrev`, `ref`")
+		}
+		dir := args[2]
+		oldrev := args[3]
+		newrev := args[4]
+		ref := args[5]
+		err = PreReceive(dir, oldrev, newrev, ref)
+	default:
+		err = fmt.Errorf("Unknown mode `%v`", mode)
 	}
 
 	if err != nil {
