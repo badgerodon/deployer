@@ -61,4 +61,6 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	// Start the app
 	// Enable app in load balancer
 	// Cleanup old versions on the endpoints
+
+	return nil
 }
