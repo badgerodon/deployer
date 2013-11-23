@@ -17,7 +17,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	}
 
 	temp := filepath.Join(os.TempDir(), uuid.NewV4().String())
-	err = os.Mkdir(temp, 0x777)
+	err := os.Mkdir(temp, 0x777)
 	if err != nil {
 		return fmt.Errorf("- failed to create directory: %v", err)
 	}
