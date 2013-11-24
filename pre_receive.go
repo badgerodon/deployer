@@ -47,17 +47,29 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 
 	// Build
 	for k, v := range apps {
-		log.Println("building", k)
 		folder, err := cfg.String(k + ".folder")
 		if err != nil {
 			return fmt.Errorf("- expected folder in: %v, %v", v, err)
 		}
-		os.Chdir(filepath.Join(temp, folder))
-		bs, err = exec.Command("go", "build", "-v").CombinedOutput()
+		typ, err := cfg.String(k + ".type")
 		if err != nil {
-			return fmt.Errorf("- failed to build: %s", bs)
+			return fmt.Errorf("- expected type in: %v, %v", v, err)
 		}
-		log.Println("-", string(bs))
+		build, err := cfg.String(k + ".build")
+		if err != nil {
+			return fmt.Errorf("- expected build in: %v, %v", v, err)
+		}
+
+		switch build {
+		case "go":
+			err = BuildGo(typ, folder)
+		default:
+			err = fmt.Errorf("unknown build type %v", build)
+		}
+
+		if err != nil {
+			return fmt.Errorf("error building %v: %v", k, err)
+		}
 	}
 
 	// Clean
