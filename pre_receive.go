@@ -192,6 +192,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 		// Start the app
 		log.Println("starting")
 		exec.Command("/etc/init.d/"+k, "start").Run()
+
 		// Enable app in load balancer
 		err = EnableAppInProxy(cfg, k)
 		if err != nil {
