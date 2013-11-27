@@ -121,7 +121,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 			return err
 		}
 		if info.IsDir() {
-			if strings.HasPrefix(filepath.Base(path), ".") {
+			if strings.HasPrefix(filepath.Base(path), ".") || filepath.Base(path) == "Godeps" {
 				os.RemoveAll(path)
 				return filepath.SkipDir
 			}
