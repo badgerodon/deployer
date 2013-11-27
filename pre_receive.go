@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/badgerodon/proxy"
 	"github.com/go-contrib/uuid"
 	"github.com/moraes/config"
 	"log"
@@ -10,6 +11,45 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+func DisableAppInProxy(cfg *config.Config, name string) error {
+	pcfg, err := proxy.GetConfig("/opt/proxy/config.json")
+	if err != nil {
+		return fmt.Errorf("error reading proxy config: %v", err)
+	}
+	host, err := cfg.String(name + ".host")
+	if err != nil {
+		return fmt.Errorf("error reading host: %v", err)
+	}
+	delete(pcfg.Routes, host)
+	err = pcfg.Save("/opt/proxy/config.json")
+	if err != nil {
+		return fmt.Errorf("error saving config: %v", err)
+	}
+	return nil
+}
+func EnableAppInProxy(cfg *config.Config, name string) error {
+	pcfg, err := proxy.GetConfig("/opt/proxy/config.json")
+	if err != nil {
+		return fmt.Errorf("error reading proxy config: %v", err)
+	}
+	host, err := cfg.String(name + ".host")
+	if err != nil {
+		return fmt.Errorf("error reading host: %v", err)
+	}
+	port, err := cfg.Int(name + ".port")
+	if err != nil {
+		return fmt.Errorf("error reading port: %v", err)
+	}
+	pcfg.Routes[host] = proxy.Entry{
+		Endpoints: []string{fmt.Sprint("127.0.0.1:", port)},
+	}
+	err = pcfg.Save("/opt/proxy/config.json")
+	if err != nil {
+		return fmt.Errorf("error saving config: %v", err)
+	}
+	return nil
+}
 
 func PreReceive(dir, oldrev, newrev, ref string) error {
 	// We only care about master
@@ -62,7 +102,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 
 		switch build {
 		case "go":
-			err = BuildGo(typ, folder)
+			err = BuildGo(typ, folder, cfg)
 		default:
 			err = fmt.Errorf("unknown build type %v", build)
 		}
@@ -91,12 +131,68 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 
 		return nil
 	})
-	// Sync to endpoints
-	// Disable app in load balancer
-	// Swap to new version
-	// Start the app
-	// Enable app in load balancer
-	// Cleanup old versions on the endpoints
+
+	for k, _ := range apps {
+		// Sync to endpoints
+		log.Println("syncing", k)
+		os.Mkdir("/opt/"+k+"/staging", 0777)
+		bs, err := exec.Command("rsync",
+			"--recursive",
+			"--links",
+			"--perms",
+			"--times",
+			"--devices",
+			"--specials",
+			"--hard-links",
+			"--acls",
+			"--delete",
+			"--xattrs",
+			"--numeric-ids",
+			temp, // from
+			"/opt/"+k+"/staging", // to
+		).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("error syncing folder: %s", bs)
+		}
+
+		// Disable app in load balancer
+		err = DisableAppInProxy(cfg, k)
+		if err != nil {
+			return fmt.Errorf("error disabling app in proxy: %v", err)
+		}
+
+		// Stop the app
+		log.Println("stopping")
+		exec.Command("/etc/init.d/"+k, "stop").Run()
+
+		// Swap to new version
+		log.Println("swapping")
+		os.Mkdir("/opt/"+k+"/current", 0777)
+		bs, err = exec.Command("rsync",
+			"--recursive",
+			"--links",
+			"--perms",
+			"--times",
+			"--devices",
+			"--specials",
+			"--hard-links",
+			"--acls",
+			"--delete",
+			"--xattrs",
+			"--numeric-ids",
+			"/opt/"+k+"/staging", // from
+			"/opt/"+k+"/current", // to
+		).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("error syncing folder: %s", bs)
+		}
+		// Start the app
+		// Enable app in load balancer
+		err = EnableAppInProxy(cfg, k)
+		if err != nil {
+			return fmt.Errorf("error enabling app in proxy: %v", err)
+		}
+	}
 
 	return fmt.Errorf("Not Implemented")
 }

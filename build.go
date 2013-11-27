@@ -2,15 +2,22 @@ package main
 
 import (
 	"fmt"
+	"github.com/moraes/config"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
 
-func BuildGo(typ, folder string) error {
-	log.Println("building as go:", typ, folder)
-	err := os.Chdir(folder)
+func BuildGo(root, name string, cfg *config.Config) error {
+	folder, err := cfg.String("folder")
+	if err != nil {
+		return fmt.Errorf("expected folder in config")
+	}
+	folder = filepath.Join(root, folder)
+
+	log.Println("building as go:", name, folder)
+	err = os.Chdir(folder)
 	if err != nil {
 		return fmt.Errorf("unable to change directory to %v: %v", folder, err)
 	}
@@ -19,9 +26,9 @@ func BuildGo(typ, folder string) error {
 
 	fi, err := os.Stat(filepath.Join(folder, "Godeps"))
 	if err == nil && fi.IsDir() {
-		cmd = exec.Command("godep", "go", "build", "-v")
+		cmd = exec.Command("godep", "go", "build", "-v", "-o", name)
 	} else {
-		cmd = exec.Command("go", "build", "-v")
+		cmd = exec.Command("go", "build", "-v", "-o", name)
 	}
 
 	bs, err := cmd.CombinedOutput()
