@@ -89,14 +89,14 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	for k, v := range apps {
 		app, _ := cfg.Get(k)
 
-		//folder, err := app.String("folder")
-		//if err != nil {
-		//	return fmt.Errorf("- expected folder in: %v, %v", v, err)
-		//}
-		//typ, err := app.String("type")
-		//if err != nil {
-		//	return fmt.Errorf("- expected type in: %v, %v", v, err)
-		//}
+		_, err = app.String("folder")
+		if err != nil {
+			return fmt.Errorf("- expected folder in: %v, %v", v, err)
+		}
+		_, err = app.String("type")
+		if err != nil {
+			return fmt.Errorf("- expected type in: %v, %v", v, err)
+		}
 		build, err := app.String("build")
 		if err != nil {
 			return fmt.Errorf("- expected build in: %v, %v", v, err)
@@ -137,6 +137,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	for k, _ := range apps {
 		app, _ := cfg.Get(k)
 		typ, _ := app.String("type")
+		folder, _ := app.String("folder")
 
 		// Sync to endpoints
 		log.Println("syncing", k)
@@ -154,8 +155,8 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 			"--delete",
 			"--xattrs",
 			"--numeric-ids",
-			temp+"/",              // from
-			"/opt/"+k+"/staging/", // to
+			filepath.Join(temp, folder)+"/", // from
+			"/opt/"+k+"/staging/",           // to
 		).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error syncing folder: %s", bs)
