@@ -62,7 +62,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	if err != nil {
 		return fmt.Errorf("- failed to create directory: %v", err)
 	}
-	//defer os.RemoveAll(temp)
+	defer os.RemoveAll(temp)
 
 	// Export to temp
 	log.Println("exporting", dir, newrev, "to", temp)
@@ -137,6 +137,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	for k, _ := range apps {
 		// Sync to endpoints
 		log.Println("syncing", k)
+		os.Mkdir("/opt/"+k, 0777)
 		os.Mkdir("/opt/"+k+"/staging", 0777)
 		bs, err := exec.Command("rsync",
 			"--recursive",
