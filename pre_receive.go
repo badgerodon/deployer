@@ -151,8 +151,8 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 			"--delete",
 			"--xattrs",
 			"--numeric-ids",
-			temp, // from
-			"/opt/"+k+"/staging", // to
+			temp+"/",              // from
+			"/opt/"+k+"/staging/", // to
 		).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error syncing folder: %s", bs)
@@ -183,8 +183,8 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 			"--delete",
 			"--xattrs",
 			"--numeric-ids",
-			"/opt/"+k+"/staging", // from
-			"/opt/"+k+"/current", // to
+			"/opt/"+k+"/staging/", // from
+			"/opt/"+k+"/current/", // to
 		).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error syncing folder: %s", bs)
