@@ -89,10 +89,10 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	for k, v := range apps {
 		app, _ := cfg.Get(k)
 
-		folder, err := app.String("folder")
-		if err != nil {
-			return fmt.Errorf("- expected folder in: %v, %v", v, err)
-		}
+		//folder, err := app.String("folder")
+		//if err != nil {
+		//	return fmt.Errorf("- expected folder in: %v, %v", v, err)
+		//}
 		//typ, err := app.String("type")
 		//if err != nil {
 		//	return fmt.Errorf("- expected type in: %v, %v", v, err)
@@ -104,7 +104,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 
 		switch build {
 		case "go":
-			err = BuildGo(temp, folder, app)
+			err = BuildGo(temp, k, app)
 		default:
 			err = fmt.Errorf("unknown build type %v", build)
 		}
