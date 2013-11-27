@@ -12,12 +12,12 @@ import (
 	"strings"
 )
 
-func DisableAppInProxy(cfg *config.Config, name string) error {
+func DisableAppInProxy(cfg *config.Config) error {
 	pcfg, err := proxy.GetConfig("/opt/proxy/config.json")
 	if err != nil {
 		return fmt.Errorf("error reading proxy config: %v", err)
 	}
-	host, err := cfg.String(name + ".host")
+	host, err := cfg.String("host")
 	if err != nil {
 		return fmt.Errorf("error reading host: %v", err)
 	}
@@ -28,16 +28,16 @@ func DisableAppInProxy(cfg *config.Config, name string) error {
 	}
 	return nil
 }
-func EnableAppInProxy(cfg *config.Config, name string) error {
+func EnableAppInProxy(cfg *config.Config) error {
 	pcfg, err := proxy.GetConfig("/opt/proxy/config.json")
 	if err != nil {
 		return fmt.Errorf("error reading proxy config: %v", err)
 	}
-	host, err := cfg.String(name + ".host")
+	host, err := cfg.String("host")
 	if err != nil {
 		return fmt.Errorf("error reading host: %v", err)
 	}
-	port, err := cfg.Int(name + ".port")
+	port, err := cfg.Int("port")
 	if err != nil {
 		return fmt.Errorf("error reading port: %v", err)
 	}
@@ -135,6 +135,9 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 	})
 
 	for k, _ := range apps {
+		app, _ := cfg.Get(k)
+		typ, _ := app.String("type")
+
 		// Sync to endpoints
 		log.Println("syncing", k)
 		os.Mkdir("/opt/"+k, 0777)
@@ -159,9 +162,11 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 		}
 
 		// Disable app in load balancer
-		err = DisableAppInProxy(cfg, k)
-		if err != nil {
-			return fmt.Errorf("error disabling app in proxy: %v", err)
+		if typ == "web" {
+			err = DisableAppInProxy(app)
+			if err != nil {
+				return fmt.Errorf("error disabling app in proxy: %v", err)
+			}
 		}
 
 		// Stop the app
@@ -194,9 +199,11 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 		exec.Command("/etc/init.d/"+k, "start").Run()
 
 		// Enable app in load balancer
-		err = EnableAppInProxy(cfg, k)
-		if err != nil {
-			return fmt.Errorf("error enabling app in proxy: %v", err)
+		if typ == "web" {
+			err = EnableAppInProxy(app)
+			if err != nil {
+				return fmt.Errorf("error enabling app in proxy: %v", err)
+			}
 		}
 	}
 
