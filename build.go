@@ -25,6 +25,7 @@ func BuildGo(root, name string, cfg *config.Config) error {
 	var cmd *exec.Cmd
 
 	fi, err := os.Stat(filepath.Join(folder, "Godeps"))
+	log.Println("checking for godep", filepath.Join(folder, "Godeps"), fi, err)
 	if err == nil && fi.IsDir() {
 		cmd = exec.Command("godep", "go", "build", "-v", "-o", name)
 	} else {
