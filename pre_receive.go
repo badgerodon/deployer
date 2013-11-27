@@ -102,7 +102,7 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 
 		switch build {
 		case "go":
-			err = BuildGo(typ, folder, cfg)
+			err = BuildGo(typ, folder, cfg.Get(k))
 		default:
 			err = fmt.Errorf("unknown build type %v", build)
 		}
