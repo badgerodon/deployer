@@ -12,8 +12,10 @@ import (
 	"strings"
 )
 
+const PROXY_CONFIG_PATH = "/opt/badgerodon-proxy/current/config.json"
+
 func DisableAppInProxy(cfg *config.Config) error {
-	pcfg, err := proxy.GetConfig("/opt/proxy/config.json")
+	pcfg, err := proxy.GetConfig(PROXY_CONFIG_PATH)
 	if err != nil {
 		return fmt.Errorf("error reading proxy config: %v", err)
 	}
@@ -22,14 +24,14 @@ func DisableAppInProxy(cfg *config.Config) error {
 		return fmt.Errorf("error reading host: %v", err)
 	}
 	delete(pcfg.Routes, host)
-	err = pcfg.Save("/opt/proxy/config.json")
+	err = pcfg.Save(PROXY_CONFIG_PATH)
 	if err != nil {
 		return fmt.Errorf("error saving config: %v", err)
 	}
 	return nil
 }
 func EnableAppInProxy(cfg *config.Config) error {
-	pcfg, err := proxy.GetConfig("/opt/proxy/config.json")
+	pcfg, err := proxy.GetConfig(PROXY_CONFIG_PATH)
 	if err != nil {
 		return fmt.Errorf("error reading proxy config: %v", err)
 	}
@@ -44,7 +46,7 @@ func EnableAppInProxy(cfg *config.Config) error {
 	pcfg.Routes[host] = proxy.Entry{
 		Endpoints: []string{fmt.Sprint("127.0.0.1:", port)},
 	}
-	err = pcfg.Save("/opt/proxy/config.json")
+	err = pcfg.Save(PROXY_CONFIG_PATH)
 	if err != nil {
 		return fmt.Errorf("error saving config: %v", err)
 	}
