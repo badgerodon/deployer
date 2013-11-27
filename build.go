@@ -34,6 +34,8 @@ func BuildGo(root, name string, cfg *config.Config) error {
 	bs, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to build: %v, %v", string(bs), err)
+	} else {
+		log.Println(string(bs))
 	}
 
 	return nil
