@@ -205,7 +205,7 @@ func deploy() error {
 }
 
 func main() {
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(0)
 
 	args := os.Args
 	if len(args) <= 1 {
@@ -216,7 +216,14 @@ func main() {
 	var err error
 
 	switch mode {
-	case "bootstrap":
+	case "deploy":
+		if len(args) <= 2 {
+			log.Fatalln("Expected `env`")
+		}
+		wd, _ := os.Getwd()
+		env := args[2]
+		err = Deploy(wd, env)
+	/*case "bootstrap":
 		if len(args) <= 2 {
 			log.Fatalln("Expected `hostname`")
 		}
@@ -230,7 +237,7 @@ func main() {
 		oldrev := args[3]
 		newrev := args[4]
 		ref := args[5]
-		err = PreReceive(dir, oldrev, newrev, ref)
+		err = PreReceive(dir, oldrev, newrev, ref)*/
 	default:
 		err = fmt.Errorf("Unknown mode `%v`", mode)
 	}

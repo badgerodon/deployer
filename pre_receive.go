@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"fmt"
 	"github.com/badgerodon/proxy"
@@ -212,3 +213,4 @@ func PreReceive(dir, oldrev, newrev, ref string) error {
 
 	return fmt.Errorf("Not Implemented")
 }
+*/
