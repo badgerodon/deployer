@@ -11,8 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+)
+
+var (
+	IP_PATTERN = regexp.MustCompile(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`)
 )
 
 func copyAll(from, to string) error {
@@ -41,14 +46,14 @@ func copyAll(from, to string) error {
 	})
 }
 
-func deployRestart(c *ssh.ClientConn, name string) error {
+func deployRestart(c *ssh.ClientConn, name, env string) (int, error) {
 	tn := uuid.NewV4().String()
 	tf := filepath.Join(os.TempDir(), tn)
 	defer os.Remove(tf)
 
 	ns, err := sshutil.Run(c, "netstat -lnt")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	ports := map[int]bool{}
 	for _, s := range strings.Fields(ns) {
@@ -65,31 +70,50 @@ func deployRestart(c *ssh.ClientConn, name string) error {
 		port++
 	}
 
-	sshutil.Run(c, "sudo systemctl stop "+name+".service")
-	sshutil.Run(c, "rm -rf /opt/"+name+"/current/*")
-	sshutil.Run(c, "cp -R /opt/"+name+"/staging/* /opt/"+name+"/current/")
+	sshutil.Run(c, "systemctl stop "+name+".service")
+	sshutil.Run(c, "rm -rf /opt/"+name+"/"+env+"/*")
+	sshutil.Run(c, "cp -R /opt/"+name+"/_staging/* /opt/"+name+"/"+env+"/")
+	cleanRemote(c, "/opt/"+name+"/"+env)
 
 	f, err := os.Create(tf)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	err = SYSTEMD.Execute(f, map[string]interface{}{
 		"Name": name,
 		"Port": port,
+		"Env":  env,
 	})
 	f.Close()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	err = sshutil.SendFile(c, tf, "/tmp/"+tn)
+	err = sshutil.SendFile(c, tf, "/etc/systemd/system/"+name+".service")
 	if err != nil {
-		return err
+		return 0, err
 	}
-	sshutil.Run(c, `sudo mv -f /tmp/`+tn+` /etc/systemd/system/`+name+`.service`)
-	sshutil.Run(c, `sudo systemctl enable `+name+`.service`)
-	sshutil.Run(c, `sudo systemctl start `+name+`.service`)
-	return nil
+	sshutil.Run(c, `systemctl enable `+name+`.service`)
+	sshutil.Run(c, `systemctl start `+name+`.service`)
+	return port, nil
+}
+
+func cleanLocal(root string) error {
+	return filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if fi.IsDir() && strings.HasPrefix(filepath.Base(p), ".") {
+			os.RemoveAll(p)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+}
+
+func cleanRemote(conn *ssh.ClientConn, root string) error {
+	_, err := sshutil.Run(conn, `find `+root+` -name '*.go' -print0 | xargs -0 rm -rf`)
+	return err
 }
 
 func prepareGo(root string) error {
@@ -97,36 +121,71 @@ func prepareGo(root string) error {
 	if err != nil {
 		return fmt.Errorf("unable to change directory to %v: %v", root, err)
 	}
+	os.MkdirAll(filepath.Join(root, "vendor", "src"), 0700)
 
-	_, err = os.Stat(filepath.Join(root, "Godeps"))
+	deps, err := exec.Command("go", "list", "-f", "{{range .Deps}}{{.}} {{end}}").CombinedOutput()
 	if err != nil {
-		err = exec.Command("godep", "save").Run()
+		return fmt.Errorf("failed to get dependencies: %s", deps)
 	}
+	args := append([]string{"list", "-f", "{{.Standard}} {{.Dir}} {{.ImportPath}}"}, strings.Fields(string(deps))...)
+	deps, err = exec.Command("go", args...).CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get dependencies: %s", deps)
 	}
-
-	err = filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
-		if err != nil || p == "." {
-			return nil
-		}
-
-		if fi.IsDir() {
-			if strings.HasPrefix(p, ".") {
-				return filepath.SkipDir
+	for _, dep := range strings.Split(string(deps), "\n") {
+		fs := strings.Fields(dep)
+		if len(fs) > 2 && fs[0] == "false" {
+			src := fs[1]
+			importPath := fs[2]
+			dst := filepath.Join(root, "vendor", "src", importPath)
+			os.MkdirAll(dst, 0700)
+			err = copyAll(src, dst)
+			if err != nil {
+				return fmt.Errorf("failed to copy dependency: %v", err)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return err
 	}
+
 	return nil
 }
 
-func Deploy(root, env string) error {
+func getStringList(cfg *config.Config, name string) []string {
+	arr, err := cfg.List(name)
+	if err != nil {
+		return []string{}
+	}
+	items := []string{}
+	for _, item := range arr {
+		items = append(items, fmt.Sprint(item))
+	}
+	return items
+}
 
-	cfg, err := config.ParseJsonFile(filepath.Join(root, "config.json"))
+func getIp(conn *ssh.ClientConn, hostname string) string {
+	if IP_PATTERN.MatchString(hostname) {
+		return hostname
+	}
+	str, err := sshutil.Run(conn, "ip addr show")
+	if err != nil {
+		return hostname
+	}
+	for _, ln := range strings.Split(str, "\n") {
+		fs := strings.Fields(ln)
+		if len(fs) > 1 && fs[0] == "inet" {
+			ip := fs[1]
+			if strings.Contains(ip, "/") {
+				ip = ip[0:strings.Index(ip, "/")]
+			}
+			if ip != "127.0.0.1" {
+				return ip
+			}
+		}
+	}
+	return hostname
+}
+
+func Deploy(root, env string) error {
+	cfg, err := config.ParseJsonFile(filepath.Join(root, "deploy.json"))
 	if err != nil {
 		return err
 	}
@@ -158,7 +217,7 @@ func Deploy(root, env string) error {
 		defer os.RemoveAll(temp)
 
 		// copy everything from the source into it
-		err = copyAll(filepath.Join(root, folder), temp)
+		err = copyAll(root, temp)
 		if err != nil {
 			return err
 		}
@@ -166,8 +225,13 @@ func Deploy(root, env string) error {
 		log.Println("[deploy]", "preparing", k)
 		switch build {
 		case "go":
-			err = prepareGo(temp)
+			err = prepareGo(filepath.Join(temp, folder))
 		}
+		if err != nil {
+			return err
+		}
+
+		err = cleanLocal(temp)
 		if err != nil {
 			return err
 		}
@@ -176,83 +240,99 @@ func Deploy(root, env string) error {
 		if err != nil {
 			return fmt.Errorf("Unknown environment: %v", env)
 		}
-		nodes, err := envCfg.List("nodes")
-		if err != nil {
-			return fmt.Errorf("Expected `nodes` in env config")
-		}
-		proxies, err := envCfg.List("proxies")
-		if typ == "web" && err != nil {
-			return fmt.Errorf("Expected `proxies` in env config")
-		} else {
-			proxies = []interface{}{}
-		}
+		servers := getStringList(envCfg, "servers")
+		proxies := getStringList(envCfg, "proxies")
+		domains := getStringList(envCfg, "domains")
 
 		conns := make(map[string]*ssh.ClientConn)
-		for _, machine := range append(append([]interface{}{}, nodes...), proxies...) {
-			h := fmt.Sprint(machine)
-			_, ok := conns[h]
+		for _, machine := range append(append([]string{}, servers...), proxies...) {
+			_, ok := conns[machine]
 			if !ok {
-				c, err := sshutil.Dial(h)
+				c, err := sshutil.Dial(machine)
 				if err != nil {
 					return err
 				}
 				defer c.Close()
-				conns[h] = c
+				conns[machine] = c
 			}
 		}
 
 		log.Println("[deploy]", "staging", k)
-		for _, node := range nodes {
-			c := conns[fmt.Sprint(node)]
-			str, err := sshutil.Run(c, `sudo sh -c "`+
-				`mkdir -p /opt/`+k+`/staging && chmod 777 /opt/`+k+`/staging && `+
-				`mkdir -p /opt/`+k+`/current && chmod 777 /opt/`+k+`/current `+
-				`"`)
+		serverIps := map[string]string{}
+		for _, server := range servers {
+			c := conns[server]
+			str, err := sshutil.Run(c,
+				`mkdir -p /opt/`+k+`/_staging && chmod 777 /opt/`+k+`/_staging && `+
+					`mkdir -p /opt/`+k+`/`+env+` && chmod 777 /opt/`+k+`/`+env+` `)
 			if err != nil {
-				return fmt.Errorf("[deploy] failed to setup folders on %v: %v", node, str)
+				return fmt.Errorf("[deploy] failed to setup folders on %v: %v", server, str)
 			}
 
-			err = sshutil.SyncFolder(c, temp, "/opt/"+k+"/staging")
+			err = sshutil.SyncFolder(c, temp, "/opt/"+k+"/_staging")
 			if err != nil {
 				return err
 			}
+
+			serverIps[server] = getIp(c, server)
 		}
 
 		log.Println("[deploy]", "building", k)
 		switch build {
 		case "go":
-			for _, node := range nodes {
-				c := conns[fmt.Sprint(node)]
-				str, err := sshutil.Run(c, `cd /opt/`+k+`/staging && godep go build -v -o `+k)
+			for _, server := range servers {
+				c := conns[server]
+				str, err := sshutil.Run(c, `cd /opt/`+k+`/_staging/`+folder+` && GOPATH=/opt/`+k+`/_staging/`+folder+`/vendor go build -v -o /opt/`+k+`/_staging/`+k)
 				if err != nil {
-					return fmt.Errorf("[deploy] failed to build on %v: %v", node, str)
+					return fmt.Errorf("[deploy] failed to build on %v: %v", server, str)
 				}
 			}
 		}
 
 		switch typ {
 		case "web":
-			// remove from proxies
+			for _, proxy := range proxies {
+				c := conns[proxy]
+				err = disableApplicationInProxy(c, k)
+				if err != nil {
+					return fmt.Errorf("[deploy] failed to disable application in proxy on %v: %v", proxy, err)
+				}
+			}
 		}
 
 		log.Println("[deploy]", "restarting", k)
-		for _, node := range nodes {
-			c := conns[fmt.Sprint(node)]
-			err = deployRestart(c, k)
+		ports := make(map[string]int)
+		for _, server := range servers {
+			c := conns[server]
+			port, err := deployRestart(c, k, env)
 			if err != nil {
 				return err
 			}
+			ports[server] = port
 		}
-		// stop processes
-		// copy code
-		// start processes
 
 		switch typ {
 		case "web":
+			proxyServers := []*ProxyServer{}
+			for _, server := range servers {
+				proxyServers = append(proxyServers, &ProxyServer{
+					Host: serverIps[server],
+					Port: ports[server],
+				})
+			}
+			app := &ProxyApplication{
+				Name:    k,
+				Domains: domains,
+				Servers: proxyServers,
+			}
 			// add to proxies
+			for _, proxy := range proxies {
+				c := conns[proxy]
+				err = addApplicationToProxy(c, app)
+				if err != nil {
+					return fmt.Errorf("[deploy] failed to add application to proxy on %v: %v", proxy, err)
+				}
+			}
 		}
-
-		log.Println(build, typ, folder)
 	}
 
 	return nil
